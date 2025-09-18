@@ -2,13 +2,12 @@ version: 0.2
 env:
   variables:
     IMAGE_REPO_NAME: "myapp"
+    # AWS STS 호출 시 HTTPS를 강제하여 보안 정책을 준수
+    AWS_STS_REGIONAL_ENDPOINTS: "regional" 
 phases:
   pre_build:
     commands:
-      - echo "Enable strict mode (sh-safe)"
-      - set -e
-      - set -u
-      - if [ -n "${BASH_VERSION:-}" ]; then set -o pipefail; fi
+      - set -euo pipefail
       - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
       - AWS_REGION=${AWS_REGION:-ap-northeast-2}
       - REPO_URI="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$IMAGE_REPO_NAME"
@@ -18,13 +17,14 @@ phases:
   build:
     commands:
       - docker build -t $REPO_URI:$IMAGE_TAG .
-      - docker tag $REPO_URI:$IMAGE_TAG $REPO_URI:latest
+      - docker tag  $REPO_URI:$IMAGE_TAG $REPO_URI:latest
   post_build:
     commands:
       - docker push $REPO_URI:$IMAGE_TAG
       - docker push $REPO_URI:latest
       - yum install -y jq || true
-      - jq --arg IMG "$REPO_URI:$IMAGE_TAG" '.containerDefinitions[0].image=$IMG' taskdef.template.json > taskdef.json
+      # taskdef.template.json에서 이미지/계정ID 치환 → taskdef.json 생성
+      - jq --arg IMG "$REPO_URI:$IMAGE_TAG" '.containerDefinitions[0].image=$IMG' taskdef.template.json | sed "s/ACCOUNT_ID/$ACCOUNT_ID/g" > taskdef.json
       - printf '{"ImageURI":"%s"}' "$REPO_URI:$IMAGE_TAG" > imageDetail.json
 artifacts:
   files:
@@ -32,4 +32,3 @@ artifacts:
     - taskdef.json
     - imageDetail.json
     - scripts/**/*
-
