@@ -5,21 +5,25 @@ env:
 phases:
   pre_build:
     commands:
+      - set -euo pipefail
       - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
       - AWS_REGION=${AWS_REGION:-ap-northeast-2}
       - REPO_URI="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$IMAGE_REPO_NAME"
       - IMAGE_TAG=$CODEBUILD_RESOLVED_SOURCE_VERSION
+      - echo "ACCOUNT_ID=$ACCOUNT_ID REGION=$AWS_REGION REPO_URI=$REPO_URI"
       - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $REPO_URI
   build:
     commands:
       - docker build -t $REPO_URI:$IMAGE_TAG .
-      - docker tag $REPO_URI:$IMAGE_TAG $REPO_URI:latest
+      - docker tag  $REPO_URI:$IMAGE_TAG $REPO_URI:latest
   post_build:
     commands:
       - docker push $REPO_URI:$IMAGE_TAG
       - docker push $REPO_URI:latest
       - yum install -y jq || true
-      - jq --arg IMG "$REPO_URI:$IMAGE_TAG" '.containerDefinitions[0].image=$IMG' taskdef.template.json > taskdef.json
+      # taskdef.template.json에서 이미지/계정ID 치환 → taskdef.json 생성
+      - jq --arg IMG "$REPO_URI:$IMAGE_TAG" '.containerDefinitions[0].image=$IMG' taskdef.template.json | \
+        sed "s/ACCOUNT_ID/$ACCOUNT_ID/g" > taskdef.json
       - printf '{"ImageURI":"%s"}' "$REPO_URI:$IMAGE_TAG" > imageDetail.json
 artifacts:
   files:
@@ -27,4 +31,3 @@ artifacts:
     - taskdef.json
     - imageDetail.json
     - scripts/**/*
-

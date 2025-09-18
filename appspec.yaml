@@ -1,0 +1,14 @@
+version: 1
+Resources:
+  - TargetService:
+      Type: AWS::ECS::Service
+      Properties:
+        TaskDefinition: "taskdef.json"
+        LoadBalancerInfo:
+          ContainerName: "app"
+          ContainerPort: 3000
+Hooks:
+  - AfterAllowTestTraffic:
+      - location: scripts/after_allow_test.sh
+        timeout: 180
+        runas: root
